@@ -1,106 +1,112 @@
 #include "elf64.h"
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/ptrace.h>
 #include <sys/wait.h>
-#include <stdlib.h>
 
 #define ERROR -1
+#define GLOBAL 1
 #define ET_EXEC 2
 #define SHT_SYMTAB 2
 #define SHT_STRTAB 3
 
-int main(int argc, char *argv[])
-{
-    FILE* to_trace = fopen(argv[2], "r");                                                   // try to open file to debug
+
+void checkExecutable(char* file_name)
+{   
+    FILE* to_trace = fopen(file_name, "r");                                                 // try to open file to debug
     if(to_trace == NULL) {                                                                  // file does not exist
         //printf("[DEBUG] %s does not exist! :(\n", argv[2]);
         exit(ERROR);
     }
 
-    Elf64_Ehdr header;
+    Elf64_Ehdr header;                                                                      // this will hold the elf header
 
     int res = fread(&header, 1, sizeof(Elf64_Ehdr), to_trace);                              // try to read the elf header of the file to our struct
     if(res != sizeof(Elf64_Ehdr)) {                                                         // could not read
         exit(ERROR);
     }
 
-    if (header.e_ident[0] != 0x7f ||                                                        // check if file is an elf file
-        header.e_ident[1] != 'E' || 
-        header.e_ident[2] != 'L' || 
+    if(header.e_ident[0] != 0x7f ||                                                         // check if file is of ELF type
+        header.e_ident[1] != 'E' ||
+        header.e_ident[2] != 'L' ||
         header.e_ident[3] != 'F' ||
         header.e_type != ET_EXEC)                                                           // check if file is an executable
-    {
-        printf("PRF:: %s not an executable! :(\n",  argv[2]);  
+    {                                                          
+        printf("PRF:: %s not an executable! :(\n",  file_name);  
+        exit(ERROR);
+    }
+    fclose(to_trace); 
+}
+
+void checkFunction(char* file_name, char* func_name)
+{
+    int to_trace = open(file_name, O_RDONLY);                                               // try to open file to debug int an fd (because mmap later)
+    if(to_trace == -1) {                                                                    // couldnt open fd - ABORT MISSION
         exit(ERROR);
     }
 
-    //printf("[DEBUG] file is ELF file and executable type\n!");
-
-    Elf64_Shdr *sec_headers = malloc(sizeof(Elf64_Shdr) * header.e_shnum);                  // arry of section headers                                             
-    if(sec_headers == NULL) {                                                               // mllco failed
+    void *elf_file = mmap(NULL, lseek(to_trace, 0, SEEK_END),                               // mmap the whole entire elf file - its like malloc but for really big chuncks of data
+                          PROT_READ, MAP_PRIVATE, to_trace, 0);
+    if(elf_file == MAP_FAILED) {                                                            // mmap failed - ABORT MISSION
+        close(to_trace);
         exit(ERROR);
-    }
-
-    // rewind(to_trace);                                                                    // TO DO - maybe need to reset the seek pointer
-    fseek(to_trace, header.e_shoff, SEEK_SET);                                              // move seek pointer to where we want it
-    res = fread(sec_headers, header.e_shentsize, header.e_shnum, to_trace);                 // read all section headers
-    if(res != header.e_shentsize * header.e_shnum) {                                        // could not read all headers
-        exit(ERROR);
-    }
-
-    int sym_num = 0;
-    for (int i = 0; i < header.e_shnum; i++)                                                // go over section headers to find symbol table
-    {
-        if(sec_headers[i].sh_type == SHT_SYMTAB) {                                          // found it!!
-            sym_num += sec_headers[i].sh_size / sizeof(Elf64_Sym);                          // remember symbol number for later
-            break;                                                                          // stop iterating - we got what we wanted
-        }
     }
     
-    Elf64_Sym *symtab = malloc(sym_num * sizeof(Elf64_Sym));                                // alloc symbol table  
-    char **names = malloc(sizeof(char*) * header.e_shnum);                                  // alloc string array for section names
-    Elf64_Word *sym_sec_link = malloc(sizeof(Elf64_Word) * sym_num);                        // alloc array for each symbol section link (section index)
-    if(symtab == NULL || names == NULL || sym_sec_link ==NULL) {                            // malloc failed - ABORT MISSION
+    Elf64_Ehdr* header = (Elf64_Ehdr*)elf_file;                                             // the elf header is at the beginning - we can cast it with C magic!
+    Elf64_Shdr* sec_headers_arr = (Elf64_Shdr*)(elf_file + header->e_shoff);                // now we can get the section headers by using the offset from the elf header
+
+    Elf64_Shdr str_section = sec_headers_arr[header->e_shstrndx];                           // e_shstrndx is the index of the section header that contains the offset of the section header string table   
+    char *sh_str_tbl = (char*)(elf_file + str_section.sh_offset);                           // get the section header string table
+
+    Elf64_Sym *symtab;
+    char *strtab;
+    int symbol_num = 0;
+    for(int i = 0; i < header->e_shnum; i++)                                                // find and fill symtab and strtab
+    {
+        if(sec_headers_arr[i].sh_type == SHT_SYMTAB) {                                      // found symbol table
+            symtab = (Elf64_Sym*)(elf_file + sec_headers_arr[i].sh_offset);                 // C casting magic - save pointer to symtab
+            symbol_num = sec_headers_arr[i].sh_size / sec_headers_arr[i].sh_entsize;        // save symbol number for later
+        }
+        else if(sec_headers_arr[i].sh_type == SHT_STRTAB) {                                 // found srrtab
+            if((elf_file + sec_headers_arr[i].sh_offset) != sh_str_tbl)                     // make sure we get the right strtab and NOT the section header string table! (they are of the same type)
+                strtab = (char*)(elf_file + sec_headers_arr[i].sh_offset);                  // C casting magig - save pointer to strtab
+        }
+    }
+
+    int found_symbol = 0;                                                                   // this will serve as a boolean to mark if we found our function in the symtab
+    for(int i = 0; i < symbol_num; i++)                                                     // go over symbols to look for our function
+    {
+        char* curr_symbol_name = strtab + symtab[i].st_name;                                // get the name of the current symbol in symtab 
+        if(strcmp(func_name, curr_symbol_name) == 0)                                        // compare to our func name (strcmp returns 0 if the strings are equal)
+        {     
+            found_symbol = 1;                                                               // we found our symbol!                                 
+            if(ELF64_ST_BIND(symtab[i].st_info) != GLOBAL) {                                // check if its global
+                printf("PRF:: %s is not a global symbol! :(\n", func_name);
+                close(to_trace);
+                exit(ERROR);
+            }
+        }
+    }
+    if(found_symbol == 0) {                                                                 // check if we found the symbol at all
+        printf("PRF:: %s not found!\n", func_name);
+        close(to_trace);
         exit(ERROR);
     }
+    close(to_trace);                                                                        // dont forget to close your fd!!
+    // if we got to this point - the symbol is present and global!
+}
 
-    for (int i = 0; i < header.e_shnum; i++)
-    {
-        if(sec_headers[i].sh_type == SHT_SYMTAB)                                            // fill symbol table and strtab
-        {                                          
-            // rewind(to_trace);                                                            // reset seek pointer to beginning of file
-            fseek(to_trace, sec_headers[i].sh_offset, SEEK_SET);                            // set the seek point to where the symtab is
-            res = fread(symtab, sizeof(Elf64_Sym), sym_num, to_trace);                      // read the symtab into array
-            if(res != sym_num * sizeof(Elf64_Sym)) {                                        // read failed - ABORT MISSION
-                exit(ERROR);
-            }
+int main(int argc, char *argv[])
+{
+    char* file_name = argv[2];                                                              // save name of executable file
+    char* func_name = argv[1];                                                              // save name of function to run
 
-            for (int j = 0, k = *sym_sec_link; j < sym_num; j++, k+= sizeof(Elf64_Word)) {   // fill symbol section link table - for each symbol add the section num
-                sym_sec_link[k] = sec_headers[i].sh_link;
-            }
-        }
-        if(sec_headers[i].sh_type == SHT_STRTAB)                                            // fill srtab
-        {
-            // rewind(to_trace);                                                            // reset seek pointer to beginning of file
-            fseek(to_trace, sec_headers[i].sh_offset, SEEK_SET);                            // set the seek point to where the symtab is
-            names[i] = (char *) malloc(sizeof(char) * sec_headers[i].sh_size);              // alloc the string 
-            if(names[i] == NULL) {
-                exit(ERROR);
-            }
-            res = fread(names[i], sizeof(char), sec_headers[i].sh_size, to_trace);
-            if(res != sizeof(char) * sec_headers[i].sh_size) {
-                exit(ERROR);
-            }
-        } else {
-            names[i] = NULL;
-        }
-        
-    }
-    
-
-    free(sec_headers);
-    free(symtab);
-    fclose(to_trace);
+    checkExecutable(file_name);                                                             // part 1 - check if the file is an executable
+    checkFunction(file_name, func_name);                                                    // part 2+3 - check if func exists and if its global
     return 0;
 }
