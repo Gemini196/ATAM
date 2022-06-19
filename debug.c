@@ -87,6 +87,7 @@ void checkFunction(char* file_name, char* func_name)
             found_symbol = 1;                                                               // we found our symbol!                                 
             if(ELF64_ST_BIND(symtab[i].st_info) != GLOBAL) {                                // check if its global
                 printf("PRF:: %s is not a global symbol! :(\n", func_name);
+                munmap(elf_file, lseek(to_trace, 0, SEEK_END));
                 close(to_trace);
                 exit(ERROR);
             }
@@ -94,9 +95,11 @@ void checkFunction(char* file_name, char* func_name)
     }
     if(found_symbol == 0) {                                                                 // check if we found the symbol at all
         printf("PRF:: %s not found!\n", func_name);
+        munmap(elf_file, lseek(to_trace, 0, SEEK_END));
         close(to_trace);
         exit(ERROR);
     }
+    munmap(elf_file, lseek(to_trace, 0, SEEK_END));                                         // dont forget to unmap you memory
     close(to_trace);                                                                        // dont forget to close your fd!!
     // if we got to this point - the symbol is present and global!
 }
