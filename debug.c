@@ -20,6 +20,12 @@
 #define SHT_SYMTAB 2
 #define SHT_STRTAB 3
 
+// ----------------------------------------------------- Functions ---------------------------------------------------------------
+int checkExecutable(char* file_name);
+int checkFunction(char* file_name, char* func_name, long* func_addr);
+long getFuncAddress(void *elf_file, Elf64_Shdr* sec_headers_arr, Elf64_Sym* symtab, char* strtab, char* func_name, int symbol_num);
+
+
 
 int checkExecutable(char* file_name)
 {   
@@ -120,7 +126,7 @@ long getFuncAddress(void *elf_file, Elf64_Shdr* sec_headers_arr, Elf64_Sym* symt
         if(strcmp(func_name, curr_symbol_name) == 0)                                        // compare to our func name (strcmp returns 0 if the strings are equal)
         {     
             if(symtab[i].st_shndx != SHN_UNDEF) {                                           // index exists - return value (=the function's address)
-                return symtab[i].st_value;  // TODO TODO TODO TODO TODO -----------------------------------------------> DO WE NEED TO ADD RELOCATION!?!?!?!??!?!?!?!  <3 <3 <3
+                return (long)symtab[i].st_value;  // TODO TODO TODO TODO TODO -----------------------------------------------> DO WE NEED TO ADD RELOCATION!?!?!?!??!?!?!?!  <3 <3 <3
             }
 
             // IF WE HERE - SYMBOL IS UND
