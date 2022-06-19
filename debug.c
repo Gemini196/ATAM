@@ -105,14 +105,14 @@ int checkFunction(char* file_name, char* func_name, long* func_addr)
         return ERROR_SYMBOL_NOT_FOUND;
     }
 
-    *func_addr = getFuncAddress(elf_file, sec_headers_arr, symtab, strtab, func_name);      // part 4 - get function's address (either in file section or in PLT)
+    *func_addr = getFuncAddress(elf_file, sec_headers_arr, symtab, strtab, func_name, symbol_num);      // part 4 - get function's address (either in file section or in PLT)
     close(to_trace); 
     munmap(elf_file, size);                                                                 // dont forget to close your fd!!
     return SUCCESS;                                                                    
     // if we got to this point - the symbol is present and global!
 }
 
-long getFuncAddress(void *elf_file, Elf64_Shdr* sec_headers_arr, Elf64_Sym* symtab, char* strtab, char* func_name)
+long getFuncAddress(void *elf_file, Elf64_Shdr* sec_headers_arr, Elf64_Sym* symtab, char* strtab, char* func_name, int symbol_num)
 {
     for(int i = 0; i < symbol_num; i++)                                                     // go over symbols to look for our function
     {
