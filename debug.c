@@ -20,6 +20,9 @@
 #define SHT_SYMTAB 2
 #define SHT_STRTAB 3
 
+int checkExecutable(char* file_name);
+int checkFunction(char* file_name, char* func_name, long* func_addr);
+long getFuncAddress(void *elf_file, Elf64_Shdr* sec_headers_arr, Elf64_Sym* symtab, char* strtab, char* func_name, int symbol_num);
 
 int checkExecutable(char* file_name)
 {   
