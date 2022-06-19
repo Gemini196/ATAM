@@ -14,8 +14,8 @@ int main(int argc, char *argv[])
 {
     FILE* to_trace = fopen(argv[2], "r");                                                   // try to open file to debug
     if(to_trace == NULL) {                                                                  // file does not exist
-            //printf("PRF:: %s doeas not exist! :(\n", argv[2]);
-            exit(ERROR);
+        //printf("[DEBUG] %s does not exist! :(\n", argv[2]);
+        exit(ERROR);
     }
 
     Elf64_Ehdr header;
@@ -25,20 +25,25 @@ int main(int argc, char *argv[])
         exit(ERROR);
     }
 
-    if(header.e_type != ET_EXEC) {                                                          // check if file is an executable
+    if (header.e_ident[0] != 0x7f ||                                                        // check if file is an elf file
+        header.e_ident[1] != 'E' || 
+        header.e_ident[2] != 'L' || 
+        header.e_ident[3] != 'F' ||
+        header.e_type != ET_EXEC)                                                           // check if file is an executable
+    {
         printf("PRF:: %s not an executable! :(\n",  argv[2]);  
         exit(ERROR);
     }
 
-    // rewind(to_trace);                                                                    // TO DO - maybe need to reset the seek pointer
-    fseek(to_trace, header.e_shoff, SEEK_SET);                                        // move seek pointer to where we want it
-
+    //printf("[DEBUG] file is ELF file and executable type\n!");
 
     Elf64_Shdr *sec_headers = malloc(sizeof(Elf64_Shdr) * header.e_shnum);                  // arry of section headers                                             
     if(sec_headers == NULL) {                                                               // mllco failed
         exit(ERROR);
     }
 
+    // rewind(to_trace);                                                                    // TO DO - maybe need to reset the seek pointer
+    fseek(to_trace, header.e_shoff, SEEK_SET);                                              // move seek pointer to where we want it
     res = fread(sec_headers, header.e_shentsize, header.e_shnum, to_trace);                 // read all section headers
     if(res != header.e_shentsize * header.e_shnum) {                                        // could not read all headers
         exit(ERROR);
@@ -49,11 +54,12 @@ int main(int argc, char *argv[])
     {
         if(sec_headers[i].sh_type == SHT_SYMTAB) {                                          // found it!!
             sym_num += sec_headers[i].sh_size / sizeof(Elf64_Sym);                          // remember symbol number for later
+            break;                                                                          // stop iterating - we got what we wanted
         }
     }
     
     Elf64_Sym *symtab = malloc(sym_num * sizeof(Elf64_Sym));                                // alloc symbol table  
-    char **names = malloc(sizeof(char*) * header.e_shnum);                                 // alloc string array for section names
+    char **names = malloc(sizeof(char*) * header.e_shnum);                                  // alloc string array for section names
     Elf64_Word *sym_sec_link = malloc(sizeof(Elf64_Word) * sym_num);                        // alloc array for each symbol section link (section index)
     if(symtab == NULL || names == NULL || sym_sec_link ==NULL) {                            // malloc failed - ABORT MISSION
         exit(ERROR);
@@ -70,7 +76,7 @@ int main(int argc, char *argv[])
                 exit(ERROR);
             }
 
-            for (int j = 0, k = sym_sec_link; j < sym_num; j++, k+= sizeof(Elf64_Word)) {   // fill symbol section link table - for each symbol add the section num
+            for (int j = 0, k = *sym_sec_link; j < sym_num; j++, k+= sizeof(Elf64_Word)) {   // fill symbol section link table - for each symbol add the section num
                 sym_sec_link[k] = sec_headers[i].sh_link;
             }
         }
