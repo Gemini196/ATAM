@@ -29,10 +29,10 @@ long getFuncAddr(void *elf_file, Elf64_Sym *symtab, char *strtab, char* func_nam
 
 // ----------------------------------------------------- Helper Functions ---------------------------------------------------------------
 
-// Name: findSymbol
+// Name: findSection
 // Recieves elf_file ptr (from mmap), sh_type- code representing the table (ex: SHT_SYMTAB), and ptr to entry num
 // Returns ptr to said table, and *entry_num= the num of entries in said table
-void* getTable (void* elf_file, Elf64_Word sh_type, int* entry_num)
+void* findSection (void* elf_file, Elf64_Word sh_type, int* entry_num)
 {
     Elf64_Ehdr* header = (Elf64_Ehdr*)elf_file;                                             // the elf header is at the beginning - we can cast it with C magic!
     Elf64_Shdr* sec_headers_arr = (Elf64_Shdr*)(elf_file + header->e_shoff);                // now we can get the section headers by using the offset from the elf header
@@ -102,7 +102,8 @@ int checkExecutable(char* file_name)
     Elf64_Ehdr header;                                                                      // this will hold the elf header
 
     int res = fread(&header, 1, sizeof(Elf64_Ehdr), to_trace);                              // try to read the elf header of the file to our struct
-    if(res != sizeof(Elf64_Ehdr)) {                                                         // could not read
+    if(res != sizeof(Elf64_Ehdr)) {
+        fclose(to_trace);
         return ERROR;
     }
 
@@ -111,7 +112,8 @@ int checkExecutable(char* file_name)
         header.e_ident[2] != 'L' ||
         header.e_ident[3] != 'F' ||
         header.e_type != ET_EXEC)                                                           // check if file is an executable
-    {                                                          
+    {    
+        fclose(to_trace);
         return ERROR;
     }
     fclose(to_trace);
@@ -131,13 +133,12 @@ int checkFunction(char* file_name, char* func_name, unsigned long* func_addr)
                           PROT_READ, MAP_PRIVATE, to_trace, 0);
     if(elf_file == MAP_FAILED) {                                                            // mmap failed - ABORT MISSION
         close(to_trace);
-        munmap(elf_file, size);
         return ERROR;
     }
 
     int sym_num = 0, str_num=0;
-    Elf64_Sym *symtab = (Elf64_Sym*)getTable(elf_file, SHT_SYMTAB, &sym_num);
-    char *strtab = (char*)getTable(elf_file, SHT_STRTAB, &str_num);
+    Elf64_Sym *symtab = (Elf64_Sym*)findSection(elf_file, SHT_SYMTAB, &sym_num);
+    char *strtab = (char*)findSection(elf_file, SHT_STRTAB, &str_num);
 
     int res = findSymbol(symtab, strtab, func_name, sym_num);
     *func_addr = getFuncAddr(elf_file, symtab, strtab, func_name, sym_num);
@@ -167,7 +168,7 @@ long getFuncAddr(void *elf_file, Elf64_Sym *symtab, char *strtab, char* func_nam
     //////////////////////////////////////////////////// PLZ CONTINUE HERE ////////////////////////////////////////////////////////////
     int entry_num = 0;
     unsigned long plt_addr = 0;
-    Elf64_Dyn *dyntab = (Elf64_Dyn*)getTable(elf_file, SHT_DYNAMIC, &entry_num);
+    Elf64_Dyn *dyntab = (Elf64_Dyn*)findSection(elf_file, SHT_DYNAMIC, &entry_num);
 
     /*
     for (int i=0; i< entry_num; i++)
