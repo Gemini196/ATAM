@@ -29,10 +29,49 @@ long getFuncAddr(void *elf_file, Elf64_Sym *symtab, char *strtab, char* func_nam
 
 // ----------------------------------------------------- Helper Functions ---------------------------------------------------------------
 
-// Name: findSection
-// Recieves elf_file ptr (from mmap), sh_type- code representing the table (ex: SHT_SYMTAB), and ptr to entry num
+// Name: findSectionTable
+// Recieves elf_file ptr (from mmap), sh_type- code representing the wanted section type (ex: SHT_SYMTAB), and ptr to entry num
 // Returns ptr to said table, and *entry_num= the num of entries in said table
-void* findSection (void* elf_file, Elf64_Word sh_type, int* entry_num)
+/*void* findSectionTable (void* elf_file, Elf64_Word sh_type, int* entry_num)
+{
+    Elf64_Ehdr* header = (Elf64_Ehdr*)elf_file;                                             // the elf header is at the beginning - we can cast it with C magic!
+    Elf64_Shdr* sec_headers_arr = (Elf64_Shdr*)(elf_file + header->e_shoff);                // now we can get the section headers by using the offset from the elf header
+    Elf64_Word strtab_section_index;
+    void *tab = NULL;
+    
+    if (sh_type == SHT_STRTAB)                                                                  // make sure we get the strtab associated with .symtab and NOT .shstrtab OR .dynstr !! (all of same type: STRTAB)
+    {
+        for(int i = 0; i < header->e_shnum; i++)                                                // find and fill symtab and strtab
+        {
+            if (sec_headers_arr[i].sh_type == SHT_SYMTAB) {
+                strtab_section_index = sec_headers_arr[i].sh_link;
+            }
+            if (i == strtab_section_index) {
+                 tab = (void*)(elf_file + sec_headers_arr[i].sh_offset);
+                 return tab;
+            }
+        }
+    }// check possibility for strtab BEFORE symtab!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+    // not looking for strtab
+    else{
+        for(int i = 0; i < header->e_shnum; i++)                                                // find and fill symtab and strtab
+        {
+            if (sec_headers_arr[i].sh_type == sh_type)
+            {
+                tab = (void*)(elf_file + sec_headers_arr[i].sh_offset);
+                *entry_num = sec_headers_arr[i].sh_size / sec_headers_arr[i].sh_entsize;
+                return tab;
+            }
+        }
+    }
+
+    
+    return tab;
+}*/
+
+
+void* findSectionTable (void* elf_file, Elf64_Word sh_type, int* entry_num)
 {
     Elf64_Ehdr* header = (Elf64_Ehdr*)elf_file;                                             // the elf header is at the beginning - we can cast it with C magic!
     Elf64_Shdr* sec_headers_arr = (Elf64_Shdr*)(elf_file + header->e_shoff);                // now we can get the section headers by using the offset from the elf header
@@ -62,6 +101,9 @@ void* findSection (void* elf_file, Elf64_Word sh_type, int* entry_num)
     return tab;
 }
 
+
+
+
 // Name: findSymbol
 // Recieves symbol table parameters & func_name
 // Returns whether it exists there/not/if global..
@@ -72,11 +114,12 @@ int findSymbol(Elf64_Sym *symtab, char *strtab, char* func_name, int symbol_num)
     for(int i = 0; i < symbol_num; i++)                                                   // go over symbols to look for our function
     {
         char* curr_symbol_name = strtab + symtab[i].st_name;                                // get the name of the current symbol in symtab 
+        //printf("%s\n",curr_symbol_name);
         if(strcmp(func_name, curr_symbol_name) == 0)                                        // compare to our func name (strcmp returns 0 if the strings are equal)
         {     
             found_symbol = true;                                                            // we found our symbol!                                 
             if(ELF64_ST_BIND(symtab[i].st_info) != GLOBAL) {                                // check if its global
-                return ERROR_SYMBOL_NOT_GLOBAL;
+                return ERROR_SYMBOL_NOT_GLOBAL;   // Y not immediately return success???????????????????????????????????????????????????????????????????????????????
             }
         }
     }
@@ -137,11 +180,11 @@ int checkFunction(char* file_name, char* func_name, unsigned long* func_addr)
     }
 
     int sym_num = 0, str_num=0;
-    Elf64_Sym *symtab = (Elf64_Sym*)findSection(elf_file, SHT_SYMTAB, &sym_num);
-    char *strtab = (char*)findSection(elf_file, SHT_STRTAB, &str_num);
+    Elf64_Sym *symtab = (Elf64_Sym*)findSectionTable(elf_file, SHT_SYMTAB, &sym_num);
+    char *strtab = (char*)findSectionTable(elf_file, SHT_STRTAB, &str_num);
 
     int res = findSymbol(symtab, strtab, func_name, sym_num);
-    *func_addr = getFuncAddr(elf_file, symtab, strtab, func_name, sym_num);
+    *func_addr = getFuncAddr(elf_file, symtab, strtab, func_name, sym_num);                 // part 4
     close(to_trace); 
     munmap(elf_file, size);                                                                 // dont forget to close your fd!!
     return res;                                                                    
@@ -168,7 +211,7 @@ long getFuncAddr(void *elf_file, Elf64_Sym *symtab, char *strtab, char* func_nam
     //////////////////////////////////////////////////// PLZ CONTINUE HERE ////////////////////////////////////////////////////////////
     int entry_num = 0;
     unsigned long plt_addr = 0;
-    Elf64_Dyn *dyntab = (Elf64_Dyn*)findSection(elf_file, SHT_DYNAMIC, &entry_num);
+   // Elf64_Dyn *dyntab = (Elf64_Dyn*)findSectionTable(elf_file, SHT_DYNAMIC, &entry_num);
 
     /*
     for (int i=0; i< entry_num; i++)
@@ -193,13 +236,12 @@ int main(int argc, char *argv[])
         printf("PRF:: %s not an executable! :(\n",  file_name);  
         return 1;
     }                  
-    // part 1                                                                                        
+                                                                                      
     int res = checkFunction(file_name, func_name, &func_addr);                                          
     if (res == ERROR){
         return 1;
     }
 
-    // part 2 + 3
     if (res == ERROR_SYMBOL_NOT_FOUND){                                                     // part 2 - check if func exists
         printf("PRF:: %s not found!\n", func_name);
         return 1;
