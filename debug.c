@@ -174,14 +174,10 @@ long getFuncAddr(void *elf_file, Elf64_Sym *symtab, char *strtab, char* func_nam
     unsigned long plt_addr = 0;
    // Elf64_Dyn *dyntab = (Elf64_Dyn*)findSectionTable(elf_file, SHT_DYNAMIC, &entry_num);
 
-    /*
-    for (int i=0; i< entry_num; i++)
-    {
-        if (dyntab->d_tag == DT_PLTGOT){
-            plt_addr = dyntab->d_un.d_ptr; //but dis is ptr
-        }
+   // get relocation table and put it in struct
+   // go over relocation table entries (but there's rela.dyn and rela.plt- which of them to use?)
+   // real address is offset+addened?
 
-    }*/
     return 0;
 }
 
