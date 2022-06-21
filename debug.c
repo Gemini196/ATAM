@@ -172,11 +172,25 @@ long getFuncAddr(void *elf_file, Elf64_Sym *symtab, char *strtab, char* func_nam
     //////////////////////////////////////////////////// PLZ CONTINUE HERE ////////////////////////////////////////////////////////////
     int entry_num = 0;
     unsigned long plt_addr = 0;
-   // Elf64_Dyn *dyntab = (Elf64_Dyn*)findSectionTable(elf_file, SHT_DYNAMIC, &entry_num);
+   
 
-   // get relocation table and put it in struct
-   // go over relocation table entries (but there's rela.dyn and rela.plt- which of them to use?)
-   // real address is offset+addened?
+   /* WHAT DO*/
+    /*
+    1. get relocation table and put it in struct 
+    2. go over relocation table entries & find relevant rela entry (how? using dynamic table?)
+    3. check relocation type (ELF64_R_TYPE)?.. (there's more than one & calculations differ..)
+    4. calculate address
+    5. return
+
+
+   /*general data*/
+   /*
+   Rela entries contain an explicit addend. Entries of type Rel store an implicit addend in the location to be modified
+   In all cases, the r_offset value designates the offset or virtual address of the first byte of the affected storage unit.
+   The relocation type specifies which bits to change and how to calculate their values.
+   */
+  
+
 
     return 0;
 }
