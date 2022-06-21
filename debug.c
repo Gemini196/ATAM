@@ -32,45 +32,6 @@ long getFuncAddr(void *elf_file, Elf64_Sym *symtab, char *strtab, char* func_nam
 // Name: findSectionTable
 // Recieves elf_file ptr (from mmap), sh_type- code representing the wanted section type (ex: SHT_SYMTAB), and ptr to entry num
 // Returns ptr to said table, and *entry_num= the num of entries in said table
-/*void* findSectionTable (void* elf_file, Elf64_Word sh_type, int* entry_num)
-{
-    Elf64_Ehdr* header = (Elf64_Ehdr*)elf_file;                                             // the elf header is at the beginning - we can cast it with C magic!
-    Elf64_Shdr* sec_headers_arr = (Elf64_Shdr*)(elf_file + header->e_shoff);                // now we can get the section headers by using the offset from the elf header
-    Elf64_Word strtab_section_index;
-    void *tab = NULL;
-    
-    if (sh_type == SHT_STRTAB)                                                                  // make sure we get the strtab associated with .symtab and NOT .shstrtab OR .dynstr !! (all of same type: STRTAB)
-    {
-        for(int i = 0; i < header->e_shnum; i++)                                                // find and fill symtab and strtab
-        {
-            if (sec_headers_arr[i].sh_type == SHT_SYMTAB) {
-                strtab_section_index = sec_headers_arr[i].sh_link;
-            }
-            if (i == strtab_section_index) {
-                 tab = (void*)(elf_file + sec_headers_arr[i].sh_offset);
-                 return tab;
-            }
-        }
-    }// check possibility for strtab BEFORE symtab!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-    // not looking for strtab
-    else{
-        for(int i = 0; i < header->e_shnum; i++)                                                // find and fill symtab and strtab
-        {
-            if (sec_headers_arr[i].sh_type == sh_type)
-            {
-                tab = (void*)(elf_file + sec_headers_arr[i].sh_offset);
-                *entry_num = sec_headers_arr[i].sh_size / sec_headers_arr[i].sh_entsize;
-                return tab;
-            }
-        }
-    }
-
-    
-    return tab;
-}*/
-
-
 void* findSectionTable (void* elf_file, Elf64_Word sh_type, int* entry_num)
 {
     Elf64_Ehdr* header = (Elf64_Ehdr*)elf_file;                                             // the elf header is at the beginning - we can cast it with C magic!
@@ -262,52 +223,41 @@ int main(int argc, char *argv[])
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/*
-long getFuncAddress(void *elf_file, Elf64_Shdr* sec_headers_arr, Elf64_Sym* symtab, Elf64_Dyn* dyntab, char* strtab, char* func_name, int symbol_num, int dyn_num)
+/*void* findSectionTable (void* elf_file, Elf64_Word sh_type, int* entry_num)
 {
-    for(int i = 0; i < symbol_num; i++)                                                     // go over symbols to look for our function
-    {
-        char* curr_symbol_name = strtab + symtab[i].st_name;                                // get the name of the current symbol in symtab 
-        if(strcmp(func_name, curr_symbol_name) == 0)                                        // compare to our func name (strcmp returns 0 if the strings are equal)
-        {     
-            if(symtab[i].st_shndx != SHN_UNDEF) {                                           // index in file exists - return value (=the function's address)
-                return (long)symtab[i].st_value;
-            }
-            break;
-        }  
-    }
+    Elf64_Ehdr* header = (Elf64_Ehdr*)elf_file;                                             // the elf header is at the beginning - we can cast it with C magic!
+    Elf64_Shdr* sec_headers_arr = (Elf64_Shdr*)(elf_file + header->e_shoff);                // now we can get the section headers by using the offset from the elf header
+    Elf64_Word strtab_section_index;
+    void *tab = NULL;
     
-    // IF WE HERE - SYMBOL IS UND
-    // now we must find PLT_GOT entry in dynamic section
-    for(int i = 0; i < dyn_num; i++)                                                     // go over symbols to look for our function
+    if (sh_type == SHT_STRTAB)                                                                  // make sure we get the strtab associated with .symtab and NOT .shstrtab OR .dynstr !! (all of same type: STRTAB)
     {
-        //char* curr_dyn_entry = dyntab + dyntab[i].st_                               // get the name of the current symbol in symtab 
-        if(dyntab[i].d_tag == DT_PLTGOT) {                                           // index in file exists - return value (=the function's address)
-                // DO SOMETHING
-                //dyntab[i].d_ptr will be the address of the PLT
+        for(int i = 0; i < header->e_shnum; i++)                                                // find and fill symtab and strtab
+        {
+            if (sec_headers_arr[i].sh_type == SHT_SYMTAB) {
+                strtab_section_index = sec_headers_arr[i].sh_link;
+            }
+            if (i == strtab_section_index) {
+                 tab = (void*)(elf_file + sec_headers_arr[i].sh_offset);
+                 return tab;
+            }
         }
+    }// check possibility for strtab BEFORE symtab!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-        if(dyntab[i].d_tag == DT_PLTRELSZ) {                                           // index in file exists - return value (=the function's address)
-                // DO SOMETHING
-                //dyntab[i].d_val will be The total size, in bytes of PLT entries
+    // not looking for strtab
+    else{
+        for(int i = 0; i < header->e_shnum; i++)                                                // find and fill symtab and strtab
+        {
+            if (sec_headers_arr[i].sh_type == sh_type)
+            {
+                tab = (void*)(elf_file + sec_headers_arr[i].sh_offset);
+                *entry_num = sec_headers_arr[i].sh_size / sec_headers_arr[i].sh_entsize;
+                return tab;
+            }
         }
-        
     }
 
-    //  for relocation tables for dynamic libraries: check out dynsym
-    // Use Elf64_R_SYM to get the index in dynsym from relocation entry
+    
+    return tab;
 }*/
+
