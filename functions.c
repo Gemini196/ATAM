@@ -17,11 +17,8 @@ char abc() {
     return 'a';
 }
 
-void print_t(){
-    printf("t");
-}
-
 int main(int argc, char *argv[])
 {
+    printf("toast");
     return 0;
 }
