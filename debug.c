@@ -33,13 +33,13 @@ typedef enum {
     SYM_NOT_GLOBAL
 } SearchStatus;
 
-long getFuncAddr(void *elf_file, Elf64_Sym *symtab, char *strtab, char* func_name, int sym_num);
+long getFuncAddr(void *elf_file, Elf64_Sym *symtab, char *strtab, char* func_name, int sym_num, bool* is_dyn);
 void* findSectionTable (void* elf_file, Elf64_Word sh_type, int* entry_num);
 SearchStatus findSymbol(Elf64_Sym *symtab, char *strtab, char* func_name, int symbol_num);
 SearchStatus checkExecutable(char* file_name);
-SearchStatus checkFunction(char* file_name, char* func_name, unsigned long* func_addr);
+SearchStatus checkFunction(char* file_name, char* func_name, unsigned long* func_addr, bool* is_dyn);
 pid_t runTarget(const char* name, const char* argv[]);
-void Debug(pid_t child_pid, unsigned long address);
+void Debug(pid_t child_pid, unsigned long address, bool is_dyn);
 
 // ======================================================================================================================================
 // ----------------------------------------------------- Helper Functions ---------------------------------------------------------------
@@ -169,7 +169,7 @@ SearchStatus checkExecutable(char* file_name)
 // Name: checkFunction
 // Recieves file name, function name, and ptr to function address var.
 // Returns SUCCESS if func is global AND executable  (), other errorcode otherwise (and 0x0 in func_addr).
-SearchStatus checkFunction(char* file_name, char* func_name, unsigned long* func_addr)
+SearchStatus checkFunction(char* file_name, char* func_name, unsigned long* func_addr, bool* is_dyn)
 {
     int to_trace = open(file_name, O_RDONLY);                                               // try to open file to debug int an fd (because mmap later)
     if(to_trace == -1) {                                                                    // couldnt open fd - ABORT MISSION
@@ -191,7 +191,7 @@ SearchStatus checkFunction(char* file_name, char* func_name, unsigned long* func
     SearchStatus res = findSymbol(symtab, strtab, func_name, sym_num);
 
     if (res == SUCCESS){
-        *func_addr = getFuncAddr(elf_file, symtab, strtab, func_name, sym_num);             // part 4
+        *func_addr = getFuncAddr(elf_file, symtab, strtab, func_name, sym_num, is_dyn);             // part 4
     }
 
     close(to_trace); 
@@ -199,9 +199,8 @@ SearchStatus checkFunction(char* file_name, char* func_name, unsigned long* func
     return res;                                                                    
 }
 
-
 // Part 4 + 5
-long getFuncAddr(void *elf_file, Elf64_Sym *symtab, char *strtab, char* func_name, int sym_num)
+long getFuncAddr(void *elf_file, Elf64_Sym *symtab, char *strtab, char* func_name, int sym_num, bool* is_dyn)
 {
     // Try finding the function in executable file
     int und_index_in_dynsym = 0;                                                             
@@ -210,7 +209,8 @@ long getFuncAddr(void *elf_file, Elf64_Sym *symtab, char *strtab, char* func_nam
         char* curr_symbol_name = strtab + symtab[i].st_name;                                // get the name of the current symbol in symtab 
         if(strcmp(func_name, curr_symbol_name) == 0)                                        // compare to our func name (strcmp returns 0 if the strings are equal)
         {     
-            if(symtab[i].st_shndx != SHN_UNDEF) {                                           // index in file exists - return value (=the function's address)
+            if(symtab[i].st_shndx != SHN_UNDEF) {                                           // index in file exists - return value (= the function's address)
+                *is_dyn = false;
                 return (long)symtab[i].st_value;
             }
             else{
@@ -227,24 +227,17 @@ long getFuncAddr(void *elf_file, Elf64_Sym *symtab, char *strtab, char* func_nam
     Elf64_Rela *reltab = (Elf64_Rela*)findSectionTable(elf_file, SHT_RELA, &rel_entry_num);   // get.rela.plt
     for (int i = 0 ; i < rel_entry_num ; i++)
     {   
-        if (ELF64_R_SYM(reltab[i].r_info) == und_index_in_dynsym)                            // pretty sure that r_info in reltab entry is the index of the relevant symbol in dynsym table                       
+        if (ELF64_R_SYM(reltab[i].r_info) == und_index_in_dynsym)                             // pretty sure that r_info in reltab entry is the index of the relevant symbol in dynsym table                       
         {
-             printf("This is address of the GOT entry of our function: %lx\n",reltab[i].r_offset);
-             Elf64_Addr* got_entry = (Elf64_Addr*)reltab[i].r_offset;
+            printf("This is address of the GOT entry of our function: %lx\n",reltab[i].r_offset);
+            Elf64_Addr* got_entry = (Elf64_Addr*)reltab[i].r_offset;
+            *is_dyn = true;
+            return got_entry;
             // segfault:
-           // printf("This is actual addr of our function: %lx\n",*got_entry);
+            // printf("This is actual addr of our function: %lx\n",*got_entry);
             //return *got_entry;               
         }
-        
     }
-
-    // OH GOD
-    // how do we use the ADDENED parameter that also appears in rela.plt??
-    // Does this include dynamic libraries?...
-    // we use lazy binding - so the got entry value may not contain our function's addr
-
-
-
     /* DO WE EVEN NEED ALL OF DIS????*/
     /*
     int entry_num = 0;
@@ -261,7 +254,6 @@ long getFuncAddr(void *elf_file, Elf64_Sym *symtab, char *strtab, char* func_nam
     }
     printf("address of got: %lx\n",got_addr);
     */
-    
 
     return 0;
 }
@@ -286,7 +278,7 @@ pid_t runTarget(const char* name, const char* argv[])
     execl(name, &argv[2]); // TO DO - check what arguments are needed;
 }
 
-void Debug(pid_t child_pid, unsigned long address)
+void Debug(pid_t child_pid, unsigned long address, const bool is_dyn)
 {
     // Some vars
     int wait_status;
@@ -298,8 +290,11 @@ void Debug(pid_t child_pid, unsigned long address)
     unsigned long ret_data = 0;
 
     waitpid(child_pid, &wait_status, 0);                                                    // wait for child to start running
+    if(is_dyn) {
+        address = *(Elf64_Addr*)address;                                                    // read from GOT entry
+    }
 
-    // Create breakpoint
+    // Create breakpoint at the beginning of our function
     unsigned long data = ptrace(PTRACE_PEEKTEXT, child_pid, (void*)address, NULL);
     unsigned long trap = ((data & 0xFFFFFFFFFFFFFF00) | 0xCC);
     ptrace(PTRACE_POKETEXT, child_pid, (void*)address, (void*)trap);
@@ -345,6 +340,9 @@ void Debug(pid_t child_pid, unsigned long address)
         }
     }
     
+    if(WIFEXITED(wait_status)) {
+        // TO DO
+    }
 }
 
 // This is MAIN
@@ -353,6 +351,7 @@ int main(int argc, char *argv[])
     char* file_name = argv[2];                                                              // save name of executable file
     char* func_name = argv[1];                                                              // save name of function to run
     unsigned long func_addr = 0;
+    bool is_dyn = false;
 
     if (checkExecutable(file_name) != SUCCESS)                                              // part 1 - check if the file is an executable
     {
@@ -360,7 +359,7 @@ int main(int argc, char *argv[])
         return 1;
     }                  
                                                                                       
-    SearchStatus res = checkFunction(file_name, func_name, &func_addr);                                          
+    SearchStatus res = checkFunction(file_name, func_name, &func_addr, &is_dyn);                                          
     if (res == ERROR){
         return 1;
     }
@@ -375,8 +374,10 @@ int main(int argc, char *argv[])
     }
 
     // part 4
-    printf("func addr:: 0x%lx\n", func_addr); // PLZ DELETE ME!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    printf("got entry/func addr:: 0x%lx\n", func_addr);                                     // PLZ DELETE ME!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
+    pid_t child_pid = runTarget(file_name, argv);
+    Debug(child_pid, func_addr, is_dyn);
 
     return 0;
 }
