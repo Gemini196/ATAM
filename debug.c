@@ -36,6 +36,7 @@ void* findSectionTable (void* elf_file, Elf64_Word sh_type, int* entry_num);
 SearchStatus findSymbol(Elf64_Sym *symtab, char *strtab, char* func_name, int symbol_num);
 SearchStatus checkExecutable(char* file_name);
 SearchStatus checkFunction(char* file_name, char* func_name, unsigned long* func_addr);
+pid_t runTarget(const char* name, char* argv[]);
 
 // ======================================================================================================================================
 // ----------------------------------------------------- Helper Functions ---------------------------------------------------------------
@@ -196,7 +197,7 @@ SearchStatus checkFunction(char* file_name, char* func_name, unsigned long* func
 }
 
 
-// Part 4
+// Part 4 + 5
 long getFuncAddr(void *elf_file, Elf64_Sym *symtab, char *strtab, char* func_name, int sym_num)
 {
     // Try finding the function in executable file
@@ -260,6 +261,26 @@ long getFuncAddr(void *elf_file, Elf64_Sym *symtab, char *strtab, char* func_nam
     
 
     return 0;
+}
+
+// Part6
+pid_t runTarget(const char* name, char* argv[])
+{
+    pid_t pid = fork();
+    if(pid < 0) {
+        //perror();
+        exit(1);
+    }
+
+    if(pid > 0) {
+        return pid;
+    }
+
+    if(ptrace(PT_TRACE_ME, 0, NULL, NULL) < 0) {
+        // perror();
+        exit(1);
+    }
+    execl(name, argv[2]); // TO DO - check what arguments are needed;
 }
 
 // This is MAIN
