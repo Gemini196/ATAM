@@ -5,6 +5,8 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/mman.h>
+#include <sys/user.h>
+#include <sys/reg.h>
 #include <sys/types.h>
 #include <sys/ptrace.h>
 #include <sys/wait.h>
@@ -36,7 +38,8 @@ void* findSectionTable (void* elf_file, Elf64_Word sh_type, int* entry_num);
 SearchStatus findSymbol(Elf64_Sym *symtab, char *strtab, char* func_name, int symbol_num);
 SearchStatus checkExecutable(char* file_name);
 SearchStatus checkFunction(char* file_name, char* func_name, unsigned long* func_addr);
-pid_t runTarget(const char* name, char* argv[]);
+pid_t runTarget(const char* name, const char* argv[]);
+void Debug(pid_t child_pid, unsigned long address);
 
 // ======================================================================================================================================
 // ----------------------------------------------------- Helper Functions ---------------------------------------------------------------
@@ -264,7 +267,7 @@ long getFuncAddr(void *elf_file, Elf64_Sym *symtab, char *strtab, char* func_nam
 }
 
 // Part6
-pid_t runTarget(const char* name, char* argv[])
+pid_t runTarget(const char* name, const char* argv[])
 {
     pid_t pid = fork();
     if(pid < 0) {
@@ -276,11 +279,72 @@ pid_t runTarget(const char* name, char* argv[])
         return pid;
     }
 
-    if(ptrace(PT_TRACE_ME, 0, NULL, NULL) < 0) {
+    if(ptrace(PTRACE_TRACEME, 0, NULL, NULL) < 0) {
         // perror();
         exit(1);
     }
-    execl(name, argv[2]); // TO DO - check what arguments are needed;
+    execl(name, &argv[2]); // TO DO - check what arguments are needed;
+}
+
+void Debug(pid_t child_pid, unsigned long address)
+{
+    // Some vars
+    int wait_status;
+    struct user_regs_struct regs;
+    static int counter = 0;                                                                  
+
+    // vars for return breakpoint
+    unsigned long ret_address = 0;
+    unsigned long ret_data = 0;
+
+    waitpid(child_pid, &wait_status, 0);                                                    // wait for child to start running
+
+    // Create breakpoint
+    unsigned long data = ptrace(PTRACE_PEEKTEXT, child_pid, (void*)address, NULL);
+    unsigned long trap = ((data & 0xFFFFFFFFFFFFFF00) | 0xCC);
+    ptrace(PTRACE_POKETEXT, child_pid, (void*)address, (void*)trap);
+
+    // Wait for child to get to Breakpoint
+    ptrace(PTRACE_CONT, child_pid, NULL, NULL);
+    waitpid(child_pid, &wait_status, 0);
+
+    // Child reached breakpont
+    while (WIFSTOPPED(wait_status))
+    {
+        ptrace(PTRACE_GETREGS, child_pid, 0, &regs);                                        // Get registers of chiled
+        if(regs.rip - 1 == address)                                                         // Check location of breakpoint (start of func or end of func)
+        {
+            // Fix RIP and Remove breakpoint opcode
+            regs.rip--;
+            ptrace(PTRACE_SETREGS, child_pid, 0, &regs);
+            ptrace(PTRACE_POKETEXT, child_pid, (void*)address, (void*)data);
+            counter++;
+
+            // Set breakpoint at the end of the func
+            ret_address = ptrace(PTRACE_PEEKTEXT, child_pid, regs.rsp, NULL);
+            ret_data = ptrace(PTRACE_PEEKTEXT, child_pid, (void*)ret_address, NULL);
+            unsigned long ret_trap = ((ret_data & 0xFFFFFFFFFFFFFF00) | 0xCC);
+            ptrace(PTRACE_POKETEXT, child_pid, (void*)ret_address, (void*)ret_trap);
+
+            // Continue until func returns
+            ptrace(PTRACE_CONT, child_pid, NULL, NULL);
+            waitpid(child_pid, &wait_status, 0);
+        }
+        else if(regs.rip - 1 == ret_address && ret_address != 0)
+        {
+            // Fix RIP and Remove breakpoint opcode
+            regs.rip--;
+            ptrace(PTRACE_SETREGS, child_pid, 0, &regs);
+            ptrace(PTRACE_POKETEXT, child_pid, (void*)ret_address, (void*)ret_data);
+
+            // Setbreakpoint at the beginnig of func
+            ptrace(PTRACE_POKETEXT, child_pid, (void*)address, (void*)trap);
+
+            // Print ret val (in RAX)
+            printf("PRF:: run #%d returned with %lld\n", counter, regs.rax);
+        }
+    }
+    
 }
 
 // This is MAIN
@@ -301,11 +365,11 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    if (res == SYM_NOT_FOUND){                                                     // part 2 - check if func exists
+    if (res == SYM_NOT_FOUND){                                                              // part 2 - check if func exists
         printf("PRF:: %s not found!\n", func_name);
         return 1;
     }
-    if (res == SYM_NOT_GLOBAL){                                                   // part 3 - check if func is global
+    if (res == SYM_NOT_GLOBAL){                                                             // part 3 - check if func is global
         printf("PRF:: %s is not a global symbol! :(\n", func_name);
         return 1;
     }
