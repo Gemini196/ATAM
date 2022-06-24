@@ -222,7 +222,7 @@ long getFuncAddr(void *elf_file, Elf64_Sym *symtab, char *strtab, char* func_nam
     // IF WE'RE HERE - SYMBOL IS UND
 
     int rel_entry_num = 0;
-
+    printf("index in dyn sym is: %d\n", und_index_in_dynsym);
     Elf64_Rela *reltab = (Elf64_Rela*)findSectionTable(elf_file, SHT_RELA, &rel_entry_num);   // get.rela.plt
     for (int i = 0 ; i < rel_entry_num ; i++)
     {   
@@ -311,7 +311,7 @@ void Debug(pid_t child_pid, unsigned long address, const bool is_dyn)
     // Child reached breakpont
     while (WIFSTOPPED(wait_status))
     {
-        printf("reached breakpoint\n");
+        // printf("reached breakpoint\n");
         ptrace(PTRACE_GETREGS, child_pid, 0, &regs);                                        // Get registers of child
         //printf("RIP is at: %llx\n", regs.rip);
         if(regs.rip - 0x1 == address)                                                       // Check location of breakpoint (start of func or end of func)
