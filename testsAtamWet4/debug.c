@@ -232,23 +232,6 @@ long getFuncAddr(void *elf_file, Elf64_Sym *symtab, char *strtab, char* func_nam
         }
     }
 
-    /* DO WE EVEN NEED ALL OF DIS????*/
-    /*
-    int entry_num = 0;
-    unsigned long plt_addr = 0;
-    Elf64_Dyn *dyntab = (Elf64_Dyn*)findSectionTable(elf_file, SHT_DYNAMIC, &entry_num);
-    Elf64_Addr got_addr = 0;
-    for (int i=0; i<entry_num; i++)
-    {
-        if (dyntab[i].d_tag == DT_PLTGOT){
-
-            got_addr = dyntab[i].d_un.d_ptr;                     // found the addr of GOT table
-            break;
-        }
-    }
-    printf("address of got: %lx\n",got_addr);
-    */
-
     return 0;
 }
 
@@ -342,7 +325,8 @@ void Debug(pid_t child_pid, unsigned long address, const bool is_dyn)
             ptrace(PTRACE_POKETEXT, child_pid, (void*)address, (void*)trap);
 
             // Print ret val (in RAX)
-            printf("PRF:: run #%d returned with %lld\n", counter, regs.rax);
+            long res = (long)regs.rax;
+            printf("PRF:: run #%d returned with %ld\n", counter, res);
             ptrace(PTRACE_CONT, child_pid, NULL, NULL);
             waitpid(child_pid, &wait_status, 0);
         }
