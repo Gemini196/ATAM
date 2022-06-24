@@ -206,17 +206,18 @@ long getFuncAddr(void *elf_file, Elf64_Sym *symtab, char *strtab, char* func_nam
     for(int i = 0; i < sym_num; i++)                                                        // go over symbols to look for our function
     {
         char* curr_symbol_name = strtab + symtab[i].st_name;                                // get the name of the current symbol in symtab 
-        if(strcmp(func_name, curr_symbol_name) == 0)                                        // compare to our func name (strcmp returns 0 if the strings are equal)
-        {     
-            if(symtab[i].st_shndx != SHN_UNDEF) {                                           // index in file exists - return value (= the function's address)
-                *is_dyn = false;
+        if(strcmp(func_name, curr_symbol_name) == 0){
+            if(symtab[i].st_shndx!= SHN_UNDEF) { 
                 return (long)symtab[i].st_value;
             }
             else{
-                und_index_in_dynsym++;
+                break;
             }
-            break;
-        }    
+        }
+
+        else if (symtab[i].st_shndx == SHN_UNDEF){
+            und_index_in_dynsym++;
+        }
     }
     // POSSIBLE BUG: DO WE NEED TO MAKE SURE THAT  UND_INDEX_IN_DYNSYM IS -- ?
     // IF WE'RE HERE - SYMBOL IS UND
@@ -296,7 +297,7 @@ void Debug(pid_t child_pid, unsigned long address, const bool is_dyn)
     //     address = *(Elf64_Addr*)address;                                                    // read from GOT entry
     // }
 
-    printf("adress is: %lx\n", address);
+    printf("address is: %lx\n", address);
     // Create breakpoint at the beginning of our function
     unsigned long data = ptrace(PTRACE_PEEKTEXT, child_pid, (void*)address, NULL);
     unsigned long trap = ((data & 0xFFFFFFFFFFFFFF00) | 0xCC);
