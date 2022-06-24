@@ -10,10 +10,6 @@
 #include <sys/wait.h>
 #include <stdbool.h>
 
-#define ERROR_SYMBOL_NOT_FOUND  -3
-#define ERROR_SYMBOL_NOT_GLOBAL -2
-#define ERROR -1
-#define SUCCESS 0
 #define GLOBAL 1
 #define SHF_ALLOC 2
 #define DT_PLTRELSZ 2
@@ -24,12 +20,26 @@
 #define SHT_RELA  4
 #define SHT_DYNAMIC 6
 
+// =====================================================================================================================================
 // ------------------------------------------------------ Declarations -----------------------------------------------------------------
+// =====================================================================================================================================
+
+typedef enum {
+    SUCCESS,
+    ERROR,
+    SYM_NOT_FOUND,
+    SYM_NOT_GLOBAL
+} SearchStatus;
 
 long getFuncAddr(void *elf_file, Elf64_Sym *symtab, char *strtab, char* func_name, int sym_num);
+void* findSectionTable (void* elf_file, Elf64_Word sh_type, int* entry_num);
+SearchStatus findSymbol(Elf64_Sym *symtab, char *strtab, char* func_name, int symbol_num);
+SearchStatus checkExecutable(char* file_name);
+SearchStatus checkFunction(char* file_name, char* func_name, unsigned long* func_addr);
 
-
+// ======================================================================================================================================
 // ----------------------------------------------------- Helper Functions ---------------------------------------------------------------
+// ======================================================================================================================================
 
 // Name: findSectionTable
 // Recieves elf_file ptr (from mmap), sh_type- code representing the wanted section type (ex: SHT_SYMTAB), and ptr to entry num
@@ -56,7 +66,7 @@ void* findSectionTable (void* elf_file, Elf64_Word sh_type, int* entry_num)
 
     // is there a chance that strtab appears before symtab?!!??!?
     else if (sh_type == SHT_STRTAB)                                                        //  Case 2: get string table
-     {
+    {
         Elf64_Word strtab_section_index;
         for(i = 0; i < header->e_shnum; i++)                                           
         {
@@ -68,10 +78,10 @@ void* findSectionTable (void* elf_file, Elf64_Word sh_type, int* entry_num)
                 return tab;
             }
         }
-     }
+    }
      
-     else 
-     {
+    else 
+    {
         for(i = 0; i < header->e_shnum; i++)                                              //  Case 3: get some other table
         {
             if(sec_headers_arr[i].sh_type == sh_type)
@@ -81,7 +91,7 @@ void* findSectionTable (void* elf_file, Elf64_Word sh_type, int* entry_num)
                 return tab;
             }
         }
-     }
+    }
 
     // not supposed to arrive here
     return tab;
@@ -91,7 +101,7 @@ void* findSectionTable (void* elf_file, Elf64_Word sh_type, int* entry_num)
 // Name: findSymbol
 // Recieves symbol table parameters & func_name
 // Returns whether it exists there/not/if global..
-int findSymbol(Elf64_Sym *symtab, char *strtab, char* func_name, int symbol_num)
+SearchStatus findSymbol(Elf64_Sym *symtab, char *strtab, char* func_name, int symbol_num)
 {
     bool found_symbol = false;                                                              // this will serve as a boolean to mark if we found our function in the symtab
 
@@ -102,25 +112,27 @@ int findSymbol(Elf64_Sym *symtab, char *strtab, char* func_name, int symbol_num)
         {     
             found_symbol = true;                                                            // we found our symbol!                                 
             if(ELF64_ST_BIND(symtab[i].st_info) != GLOBAL) {                                // check if its global
-                return ERROR_SYMBOL_NOT_GLOBAL;                                             // Y not immediately return success???????????????????????????????????????????????????????????????????????????????
+                return SYM_NOT_GLOBAL;                                             // Y not immediately return success???????????????????????????????????????????????????????????????????????????????
             }
         }
     }
 
     if(!found_symbol) {                                                                     // check if we found the symbol at all
-        return ERROR_SYMBOL_NOT_FOUND;
+        return SYM_NOT_FOUND;
     }
 
     return SUCCESS;                                                                         // if we got to this point - the symbol is present and global!
 }
 
+// ======================================================================================================================================
 // ----------------------------------------------------- Actual Functions ---------------------------------------------------------------
+// ======================================================================================================================================
 
 // Part 1
 // Name: checkExecutable
 // Recieves filename
 // Returns SUCCESS if the file is executable, ERROR otherwise.
-int checkExecutable(char* file_name)
+SearchStatus checkExecutable(char* file_name)
 {
     FILE* to_trace = fopen(file_name, "r");                                                 // try to open file to debug
     if(to_trace == NULL) {                                                                  // file does not exist
@@ -153,7 +165,7 @@ int checkExecutable(char* file_name)
 // Name: checkFunction
 // Recieves file name, function name, and ptr to function address var.
 // Returns SUCCESS if func is global AND executable  (), other errorcode otherwise (and 0x0 in func_addr).
-int checkFunction(char* file_name, char* func_name, unsigned long* func_addr)
+SearchStatus checkFunction(char* file_name, char* func_name, unsigned long* func_addr)
 {
     int to_trace = open(file_name, O_RDONLY);                                               // try to open file to debug int an fd (because mmap later)
     if(to_trace == -1) {                                                                    // couldnt open fd - ABORT MISSION
@@ -172,10 +184,10 @@ int checkFunction(char* file_name, char* func_name, unsigned long* func_addr)
     Elf64_Sym *symtab = (Elf64_Sym*)findSectionTable(elf_file, SHT_SYMTAB, &sym_num);
     char *strtab = (char*)findSectionTable(elf_file, SHT_STRTAB, NULL);
 
-    int res = findSymbol(symtab, strtab, func_name, sym_num);
+    SearchStatus res = findSymbol(symtab, strtab, func_name, sym_num);
 
     if (res == SUCCESS){
-        *func_addr = getFuncAddr(elf_file, symtab, strtab, func_name, sym_num);                 // part 4
+        *func_addr = getFuncAddr(elf_file, symtab, strtab, func_name, sym_num);             // part 4
     }
 
     close(to_trace); 
@@ -263,16 +275,16 @@ int main(int argc, char *argv[])
         return 1;
     }                  
                                                                                       
-    int res = checkFunction(file_name, func_name, &func_addr);                                          
+    SearchStatus res = checkFunction(file_name, func_name, &func_addr);                                          
     if (res == ERROR){
         return 1;
     }
 
-    if (res == ERROR_SYMBOL_NOT_FOUND){                                                     // part 2 - check if func exists
+    if (res == SYM_NOT_FOUND){                                                     // part 2 - check if func exists
         printf("PRF:: %s not found!\n", func_name);
         return 1;
     }
-    if (res == ERROR_SYMBOL_NOT_GLOBAL){                                                   // part 3 - check if func is global
+    if (res == SYM_NOT_GLOBAL){                                                   // part 3 - check if func is global
         printf("PRF:: %s is not a global symbol! :(\n", func_name);
         return 1;
     }
