@@ -5,7 +5,7 @@ int main(int argc, char** argv)
     return 1;
   if(*(*(argv+1)) == 'D')
   {
-     foo();
+    foo();
   }
   for(int i = 0; i < argc; i++)
   {

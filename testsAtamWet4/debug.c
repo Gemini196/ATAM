@@ -252,7 +252,7 @@ pid_t runTarget(const char* name, char** argv)
         // perror();
         exit(1);
     }
-    execl(name, *(argv + 3), NULL); // TO DO - check what arguments are needed;
+    execv(name, argv + 2);                               // execv supiriority!!
 }
 
 void Debug(pid_t child_pid, unsigned long address, const bool is_dyn)
@@ -325,8 +325,7 @@ void Debug(pid_t child_pid, unsigned long address, const bool is_dyn)
             ptrace(PTRACE_POKETEXT, child_pid, (void*)address, (void*)trap);
 
             // Print ret val (in RAX)
-            long res = (long)regs.rax;
-            printf("PRF:: run #%d returned with %ld\n", counter, res);
+            printf("PRF:: run #%d returned with %lld\n", counter, regs.rax);
             ptrace(PTRACE_CONT, child_pid, NULL, NULL);
             waitpid(child_pid, &wait_status, 0);
         }

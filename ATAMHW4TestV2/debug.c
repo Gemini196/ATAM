@@ -252,7 +252,7 @@ pid_t runTarget(const char* name, char** argv)
         // perror();
         exit(1);
     }
-    execl(name, *(argv + 3), NULL); // TO DO - check what arguments are needed;
+    execv(name, argv + 2);                               // execv supiriority!!
 }
 
 void Debug(pid_t child_pid, unsigned long address, const bool is_dyn)

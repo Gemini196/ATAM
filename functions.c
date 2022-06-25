@@ -5,6 +5,7 @@ extern int mul(int a, int b);
 extern int div(int a, int b);
 extern bool bigger(int a, int b);
 
+int bar(int n);
 int add(int a, int b) {
     return a+b;
 }
@@ -26,6 +27,22 @@ int factorial(int n)
     if(n == 1 || n < 1)
         return 1;
     return factorial(n - 1) * n;
+}
+
+int foo(int n)
+{
+    if(n <= 1) {
+        return 1;
+    }
+    return bar(n - 1) + 1;
+}
+
+int bar(int n) 
+{
+    if(n <= 1) {
+        return 0;
+    }
+    return foo(n - 2) * 2;
 }
 
 int main(int argc, char *argv[])
@@ -50,5 +67,10 @@ int main(int argc, char *argv[])
     div(16, 4);
     factorial(10);
     add(3, 7);
+
+    foo(1);
+    bar(10);
+    foo(10);
+    
     return 0;
 }
