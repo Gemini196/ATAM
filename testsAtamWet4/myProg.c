@@ -1,4 +1,6 @@
 // gcc -no-pie -o myProg.out myProg.c /usr/lib/libmySharedLib.so
+#include <stdio.h>
+#include <string.h>
 int funcWillBeLoadedInRunTime(int, int);
 int funcWillBeLoadedInRunTime2(int, int);
 void funcDynamicDummy(void);
