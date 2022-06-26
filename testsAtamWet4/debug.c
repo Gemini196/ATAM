@@ -45,6 +45,7 @@ void Debug(pid_t child_pid, unsigned long address, bool is_dyn);
 // ----------------------------------------------------- Helper Functions ---------------------------------------------------------------
 // ======================================================================================================================================
 
+
 // Name: findSectionTable
 // Recieves elf_file ptr (from mmap), sh_type- code representing the wanted section type (ex: SHT_SYMTAB), and ptr to entry num
 // Returns ptr to said table, and *entry_num= the num of entries in said table
@@ -252,7 +253,7 @@ pid_t runTarget(const char* name, char** argv)
         // perror();
         exit(1);
     }
-    execv(name, argv + 2);                               // execv supiriority!!
+    execv(name, argv + 2);                                  // execv is better!                           
 }
 
 void Debug(pid_t child_pid, unsigned long address, const bool is_dyn)
@@ -325,7 +326,8 @@ void Debug(pid_t child_pid, unsigned long address, const bool is_dyn)
             ptrace(PTRACE_POKETEXT, child_pid, (void*)address, (void*)trap);
 
             // Print ret val (in RAX)
-            printf("PRF:: run #%d returned with %lld\n", counter, regs.rax);
+            int res = regs.rax;
+            printf("PRF:: run #%d returned with %d\n", counter, res);
             ptrace(PTRACE_CONT, child_pid, NULL, NULL);
             waitpid(child_pid, &wait_status, 0);
         }
